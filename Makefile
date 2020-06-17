@@ -29,8 +29,7 @@
 ################################################################################
 
 # Target board/hardware
-TARGET=CY8CPROTO-062-4343W
-
+TARGET=CY8CKIT-062-BLE
 # Name of application (used to derive name of final linked file).
 APPNAME=mtb-example-psoc6-empty-app
 
@@ -67,7 +66,7 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-COMPONENTS=
+COMPONENTS=BLESS_HOST BLESS_CONTROLLER
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
 DISABLE_COMPONENTS=
@@ -113,13 +112,13 @@ LDFLAGS=
 LDLIBS=
 
 # Path to the linker script to use (if empty, use the default linker script).
-LINKER_SCRIPT=
+LINKER_SCRIPT=dfu_cm4_app0.ld
 
 # Custom pre-build commands to run.
 PREBUILD=
 
 # Custom post-build commands to run.
-POSTBUILD=
+POSTBUILD="$(CY_MCUELFTOOL_DIR)/bin/cymcuelftool.exe" --sign $(CY_CONFIG_DIR)/$(APPNAME).elf --hex $(CY_CONFIG_DIR)/$(APPNAME).hex
 
 
 ################################################################################
