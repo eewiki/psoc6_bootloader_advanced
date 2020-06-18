@@ -58,6 +58,7 @@
 /******************************************************************************/
 void AppCallBack(uint32_t event, void* eventParam);
 void flashLED(cyhal_gpio_t led);
+void IasEventHandler(uint32 event, void *eventParam);
 
 
 /******************************************************************************/
@@ -68,6 +69,7 @@ void flashLED(cyhal_gpio_t led);
 /******************************************************************************/
 /*                            Global Variables                                */
 /******************************************************************************/
+volatile uint8_t alertLevel;
 
 
 /******************************************************************************/
@@ -164,6 +166,10 @@ int main(void)
 	/* Initialize DFU communication */
 	Cy_DFU_TransportStart();
 
+	/* Registers the IAS CallBack. */
+	alertLevel = 0;
+	Cy_BLE_IAS_RegisterAttrCallback(IasEventHandler);
+
 	count = 0;
 	for(;;)
 	{
@@ -250,6 +256,18 @@ int main(void)
 		       }
 		   }
 		}
+
+		/* If alert level raised */
+		if ( alertLevel != 0 )
+		{
+		    /* Validate and switch to App1 */
+		    status = Cy_DFU_ValidateApp(1u, &dfuParams);
+		    if (status == CY_DFU_SUCCESS)
+		    {
+		       Cy_DFU_TransportStop();
+		       Cy_DFU_ExecuteApp(1u);
+		    }
+		}
 	}
 }
 
@@ -299,6 +317,31 @@ void flashLED(cyhal_gpio_t led)
     if(result != CY_RSLT_SUCCESS)
     {
         CY_ASSERT(0);
+    }
+}
+
+
+/*******************************************************************************
+* Function:     IasEventHandler
+* Author:       Cypress Semiconductor
+* Description:    This is an event callback function to receive events from the
+*               BLE Component, which are specific to Immediate Alert Service.
+* Date:         03-23-20
+* Parameters:
+*   event:       Write Command event from the BLE component.
+*   eventParams: A structure instance of CY_BLE_GATT_HANDLE_VALUE_PAIR_T type
+*******************************************************************************/
+void IasEventHandler(uint32 event, void *eventParam)
+{
+    (void) eventParam;
+    uint8_t alert;
+
+    /* Alert Level Characteristic write event */
+    if(event == CY_BLE_EVT_IASS_WRITE_CHAR_CMD)
+    {
+        /* Read the updated Alert Level value from the GATT database */
+        Cy_BLE_IASS_GetCharacteristicValue(CY_BLE_IAS_ALERT_LEVEL, sizeof(alert), &alert);
+        alertLevel = alert;
     }
 }
 
