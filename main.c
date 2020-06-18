@@ -106,6 +106,39 @@ int main(void)
 	    CY_ASSERT(0);
 	}
 
+	/* In the case of non-software reset and user does not want to stay in App0,
+	 * check if there is a valid app image. If there is, switch to it.
+	 */
+	if (Cy_SysLib_GetResetReason() != CY_SYSLIB_RESET_SOFT)
+	{
+	    /* If Button held for 0.5 second - Switch to App1 if it is valid */
+	    count = 10; // 50ms * 10 = 500ms
+	    while ((Cy_GPIO_Read(PIN_SW2_PORT, PIN_SW2_PIN) == 0) && (count > 0))
+	    {
+	        count--;
+	        Cy_SysLib_Delay(50);
+	    }
+
+	    /* Wait for user to release button and debounce*/
+	    while (Cy_GPIO_Read(PIN_SW2_PORT, PIN_SW2_PIN) == 0);
+	    Cy_SysLib_Delay(50);
+
+	    if (count > 0)
+	    {
+	        status = Cy_DFU_ValidateApp(1u, &dfuParams);
+	        if (status == CY_DFU_SUCCESS)
+	        {
+	            /* Clear reset reason */
+	            do
+	            {
+	                Cy_SysLib_ClearResetReason();
+	            } while(Cy_SysLib_GetResetReason() != 0);
+
+	            Cy_DFU_ExecuteApp(1u); // Never returns
+	        }
+	    }
+	}
+
 	__enable_irq();
 
 	/* Initialize DFU communication */
