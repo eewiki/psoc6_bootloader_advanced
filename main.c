@@ -55,6 +55,7 @@
 /*                           Function Prototypes                              */
 /******************************************************************************/
 void AppCallBack(uint32_t event, void* eventParam);
+void flashLED(cyhal_gpio_t led);
 
 
 /******************************************************************************/
@@ -107,6 +108,8 @@ int main(void)
 	}
 
 	__enable_irq();
+
+	flashLED(CYBSP_LED8);
 
 	/* Initialize DFU communication */
 	Cy_DFU_TransportStart();
@@ -211,6 +214,42 @@ int main(void)
 void Cy_OnResetUser(void)
 {
     Cy_DFU_OnResetApp0();
+}
+
+
+/*******************************************************************************
+* Function:     flashLED
+* Author:       Cypress Semiconductor (modified by Matt Mielke)
+* Description:    This function initializes a timer/counter for PWM operation
+*               sets a low output frequency and short duty cycle, causing the
+*               LED to flash every second.
+* Date:         03-23-20
+*******************************************************************************/
+void flashLED(cyhal_gpio_t led)
+{
+    cyhal_pwm_t pwm_led_control; // PWM object
+    cy_rslt_t   result;          // API return code
+
+    /* Initialize the TCPWM resource for PWM operation */
+    result = cyhal_pwm_init(&pwm_led_control, led, NULL);
+    if(result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
+    /* Set the PWM output frequency and duty cycle */
+    result = cyhal_pwm_set_duty_cycle(&pwm_led_control, 95, 1);
+    if(result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
+    /* Start the PWM */
+    result = cyhal_pwm_start(&pwm_led_control);
+    if(result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
 }
 
 
