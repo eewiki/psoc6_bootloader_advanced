@@ -44,6 +44,8 @@
 #include "cyhal.h"
 #include "cybsp.h"
 #include "transport_ble.h"
+#include "cy_retarget_io.h"
+#include <stdio.h>
 
 
 /******************************************************************************/
@@ -105,6 +107,14 @@ int main(void)
 	{
 	    CY_ASSERT(0);
 	}
+
+	/* Initialize retarget-io to use the debug UART port */
+	result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
+	if (result != CY_RSLT_SUCCESS)
+	{
+	    CY_ASSERT(0);
+	}
+
 
 	__enable_irq();
 
@@ -223,6 +233,8 @@ void Cy_OnResetUser(void)
 *******************************************************************************/
 void AppCallBack(uint32_t event, void* eventParam)
 {
+    cy_en_ble_api_result_t apiResult;
+
     static cy_stc_ble_gap_sec_key_info_t keyInfo =
     {
         .localKeysFlag    = CY_BLE_GAP_SMP_INIT_ENC_KEY_DIST |
@@ -245,10 +257,74 @@ void AppCallBack(uint32_t event, void* eventParam)
         /* This event is received when the BLE stack is started */
         case CY_BLE_EVT_STACK_ON:
         {
+            printf("[INFO] : BLE stack started\r\n");
             /* Enter into discoverable mode so that remote can search it. */
-            Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST, 0u);
+            apiResult = Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST, 0u);
+            if(CY_BLE_SUCCESS != apiResult)
+            {
+                printf("[ERROR] : Failed to start advertisement 0x%X\r\n", apiResult);
+            }
 
-            Cy_BLE_GAP_GenerateKeys(&keyInfo);
+            apiResult = Cy_BLE_GAP_GenerateKeys(&keyInfo);
+            if(apiResult != CY_BLE_SUCCESS)
+            {
+                printf("[Error] : Generate Keys API 0x%X\r\n", apiResult);
+            }
+            break;
+        }
+
+        /* This event indicates that some internal HW error has occurred. */
+        case CY_BLE_EVT_HARDWARE_ERROR:
+        {
+            printf("[INFO] : Hardware Error\r\n");
+            break;
+        }
+
+         /* This event is received when there is a timeout */
+        case CY_BLE_EVT_TIMEOUT:
+        {
+            /* Reason for Timeout */
+            cy_en_ble_to_reason_code_t reason_code = ((cy_stc_ble_timeout_param_t*)eventParam)->reasonCode;
+
+            switch(reason_code)
+            {
+                case CY_BLE_GAP_ADV_TO:
+                {
+                    printf("[INFO] : Advertisement timeout event\r\n");
+                    break;
+                }
+                case CY_BLE_GATT_RSP_TO:
+                {
+                    printf("[INFO] : GATT response timeout\r\n");
+                    break;
+                }
+                default:
+                {
+                    printf("[INFO] : BLE timeout event\r\n");
+                    break;
+                }
+            }
+            break;
+        }
+
+        /* This event indicates completion of Set LE event mask */
+        case CY_BLE_EVT_LE_SET_EVENT_MASK_COMPLETE:
+        {
+            printf("[INFO] : Set LE mask event mask command completed\r\n");
+            break;
+        }
+
+        /* This event indicates set device address command completed */
+        case CY_BLE_EVT_SET_DEVICE_ADDR_COMPLETE:
+        {
+            printf("[INFO] : Set device address command has completed\r\n");
+            break;
+        }
+
+        /* This event indicates set Tx Power command completed */
+        case CY_BLE_EVT_SET_TX_PWR_COMPLETE:
+        {
+            printf("[INFO] : Set Tx power command completed\r\n");
             break;
         }
 
@@ -258,6 +334,7 @@ void AppCallBack(uint32_t event, void* eventParam)
 
         case CY_BLE_EVT_GAP_AUTH_REQ:
         {
+            printf("[INFO] : GAP authentication request\r\n");
             if (cy_ble_configPtr->authInfo[CY_BLE_SECURITY_CONFIGURATION_0_INDEX].security
                 == (CY_BLE_GAP_SEC_MODE_1 | CY_BLE_GAP_SEC_LEVEL_1))
             {
@@ -268,7 +345,11 @@ void AppCallBack(uint32_t event, void* eventParam)
             cy_ble_configPtr->authInfo[CY_BLE_SECURITY_CONFIGURATION_0_INDEX].bdHandle =
                ((cy_stc_ble_gap_auth_info_t *)eventParam)->bdHandle;
 
-            Cy_BLE_GAPP_AuthReqReply(&cy_ble_configPtr->authInfo[CY_BLE_SECURITY_CONFIGURATION_0_INDEX]);
+            apiResult = Cy_BLE_GAPP_AuthReqReply(&cy_ble_configPtr->authInfo[CY_BLE_SECURITY_CONFIGURATION_0_INDEX]);
+            if (apiResult != CY_BLE_SUCCESS)
+            {
+                printf("[ERROR] : Authentication Request Reply API 0x%X\r\n", apiResult);
+            }
             break;
         }
 
@@ -277,21 +358,34 @@ void AppCallBack(uint32_t event, void* eventParam)
         */
         case CY_BLE_EVT_GAP_ENHANCE_CONN_COMPLETE:
         {
+            printf("[INFO] : GAP enhanced connection complete\r\n");
             /* sets the security keys that are to be exchanged with a peer
              * device during key exchange stage of the authentication procedure
              */
             keyInfo.SecKeyParam.bdHandle =
                 (*(cy_stc_ble_gap_enhance_conn_complete_param_t *)eventParam).bdHandle;
 
-            Cy_BLE_GAP_SetSecurityKeys(&keyInfo);
+            apiResult = Cy_BLE_GAP_SetSecurityKeys(&keyInfo);
+            if (apiResult != CY_BLE_SUCCESS)
+            {
+                printf("[ERROR] : Set Security Keys API 0x%X\r\n", apiResult);
+            }
             break;
         }
 
         /* This event indicates security key generation complete */
         case CY_BLE_EVT_GAP_KEYS_GEN_COMPLETE:
         {
+            printf("[INFO] : GAP key generation complete\r\n");
             keyInfo.SecKeyParam = (*(cy_stc_ble_gap_sec_key_param_t *)eventParam);
             Cy_BLE_GAP_SetIdAddress(&cy_ble_deviceAddress);
+            break;
+        }
+
+        /* This event indicates SMP has completed pairing feature exchange */
+        case CY_BLE_EVT_GAP_SMP_NEGOTIATED_AUTH_INFO:
+        {
+            printf("[INFO] : Pairing feature exchange complete\r\n");
             break;
         }
 
@@ -300,9 +394,68 @@ void AppCallBack(uint32_t event, void* eventParam)
          */
         case CY_BLE_EVT_GAP_DEVICE_DISCONNECTED:
         {
+            printf("[INFO] : GAP device disconnected\r\n");
             /* Enter into discoverable mode so that remote can search it. */
-            Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST, 0u);
+            apiResult = Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST, 0u);
+            if(CY_BLE_SUCCESS != apiResult)
+            {
+                printf("[ERROR] : Failed to start advertisement 0x%X\r\n", apiResult);
+            }
 
+            break;
+        }
+
+        case CY_BLE_EVT_GAP_KEYINFO_EXCHNGE_CMPLT:
+        {
+            printf("[INFO] : GAP Key Info Exchange complete\r\n");
+            break;
+        }
+
+        /* This event indicates GAP authentication complete */
+        case CY_BLE_EVT_GAP_AUTH_COMPLETE:
+        {
+            printf("[INFO] : GAP Authentication complete\r\n");
+            break;
+        }
+
+        /* This event indicates authentication process between two devices has
+         * failed */
+        case CY_BLE_EVT_GAP_AUTH_FAILED:
+        {
+            printf("[INFO] : GAP authentication failed 0x%X\r\n",
+                    ((cy_stc_ble_gap_auth_info_t*)eventParam)->authErr);
+            break;
+        }
+
+        /* This event indicates encryption is changed for an active connection */
+        case CY_BLE_EVT_GAP_ENCRYPT_CHANGE:
+        {
+            printf("[INFO] : GAP encryption change complete\r\n");
+            break;
+        }
+
+        /* This event is generated after connection parameter update is
+         * requested from the host to the controller
+         */
+        case CY_BLE_EVT_GAP_CONNECTION_UPDATE_COMPLETE:
+        {
+            printf("[INFO] : GAP connection update complete\r\n");
+            break;
+        }
+
+        /* This event indicates peripheral device has started/stopped
+         *  advertising
+         */
+        case CY_BLE_EVT_GAPP_ADVERTISEMENT_START_STOP:
+        {
+            if(CY_BLE_ADV_STATE_ADVERTISING == Cy_BLE_GetAdvertisementState())
+            {
+                printf("[INFO] : BLE advertisement started\r\n");
+            }
+            else if (CY_BLE_ADV_STATE_STOPPED == Cy_BLE_GetAdvertisementState())
+            {
+                printf("[INFO] : BLE advertisement stopped\r\n");
+            }
             break;
         }
 
@@ -316,12 +469,44 @@ void AppCallBack(uint32_t event, void* eventParam)
         case CY_BLE_EVT_GATT_CONNECT_IND:
         {
             appConnHandle = *(cy_stc_ble_conn_handle_t *)eventParam;
+            printf("[INFO] : GATT device connected\r\n");
             break;
         }
 
+        /* This event is generated at the GAP Peripheral end after disconnection */
+        case CY_BLE_EVT_GATT_DISCONNECT_IND:
+        {
+            printf("[INFO] : GATT device disconnected\r\n");
+            break;
+        }
+
+        case CY_BLE_EVT_GATTS_WRITE_CMD_REQ:
+        {
+            printf("[INFO] : GATT write command request\r\n");
+            break;
+        }
+
+        /* This event indicates that the 'GATT MTU Exchange Request' is received */
+        case CY_BLE_EVT_GATTS_XCNHG_MTU_REQ:
+        {
+            printf("[INFO] : GATT MTU Exchange Request received\r\n");
+            break;
+        }
+
+        /* This event received when GATT read characteristic request received */
+        case CY_BLE_EVT_GATTS_READ_CHAR_VAL_ACCESS_REQ:
+        {
+            printf("[INFO] : GATT read characteristic request received for handle 0x%X\r\n",
+                    (*(cy_stc_ble_gatts_char_val_read_req_t*)eventParam).attrHandle);
+            break;
+        }
+
+        /***********************************************************************
+        *                           Other Events                               *
+        ***********************************************************************/
         default:
         {
-            break;
+            printf("[INFO] : BLE Event 0x%lX\r\n", (unsigned long) event);
         }
     }
 }
