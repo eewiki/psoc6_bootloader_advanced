@@ -93,6 +93,14 @@ int main(void)
 	/* DFU params, used to configure DFU */
 	cy_stc_dfu_params_t dfuParams;
 
+	/* Unfreeze IO after Hibernate */
+	if(Cy_SysPm_GetIoFreezeStatus())
+	{
+	    Cy_SysPm_IoUnfreeze();
+	}
+	/* Set SW2 as hibernate wakeup pin */
+	Cy_SysPm_SetHibWakeupSource(CY_SYSPM_HIBPIN1_LOW);
+
 	/* Initialize dfuParams structure */
 	dfuParams.timeout          = paramsTimeout;
 	dfuParams.dataBuffer       = &buffer[0];
@@ -303,6 +311,47 @@ void AppCallBack(uint32_t event, void* eventParam)
             /* Enter into discoverable mode so that remote can search it. */
             Cy_BLE_GAPP_StartAdvertisement(CY_BLE_ADVERTISING_FAST, 0u);
 
+            break;
+        }
+
+        /* This event indicates peripheral device has started/stopped
+         *  advertising
+         */
+        case CY_BLE_EVT_GAPP_ADVERTISEMENT_START_STOP:
+        {
+            if(CY_BLE_ADV_STATE_ADVERTISING == Cy_BLE_GetAdvertisementState())
+            {
+                //printf("[INFO] : BLE advertisement started\r\n");
+            }
+            else if (CY_BLE_ADV_STATE_STOPPED == Cy_BLE_GetAdvertisementState())
+            {
+                //printf("[INFO] : BLE advertisement stopped\r\n");
+
+                /* Fast and slow advertising period complete, go to low power
+                 * mode (Hibernate mode) and wait for an external user event to
+                 * wake up the device again
+                 * */
+                Cy_DFU_TransportStop(); // Stop DFU communication
+
+                /* Check if app is valid, if it is then switch to it */
+                uint32_t status = Cy_DFU_ValidateApp(1u, NULL);
+                if (status == CY_DFU_SUCCESS)
+                {
+                    /* Clear reset reason because Cy_DFU_ExecuteApp() performs
+                     * a software reset.
+                     * Without clearing two reset reasons would be present.
+                     */
+                    do
+                    {
+                        Cy_SysLib_ClearResetReason();
+                    } while(Cy_SysLib_GetResetReason() != 0);
+
+                    Cy_DFU_ExecuteApp(1u); // Never returns
+                }
+
+                /* 300 seconds has passed and app is invalid. Hibernate */
+                Cy_SysPm_Hibernate();
+            }
             break;
         }
 
